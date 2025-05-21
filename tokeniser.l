@@ -45,9 +45,17 @@ unknown [^\"A-Za-z0-9 \n\r\t\(\)\<\>\=\!\%\&\|\}\-\;\.]+
 "do"		return DO;
 "for"		return FOR;
 "to"		return TO;
-"begin"		return BEGIN_TOKEN;
-"end"		return END_TOKEN;
-"DISPLAY"  return DISPLAY;
+[Bb][Ee][Gg][Ii][Nn]     return BEGIN_TOKEN;
+[Ee][Nn][Dd]             return END_TOKEN;
+[Dd][Ii][Ss][Pp][Ll][Aa][Yy]  return DISPLAY;
+[Vv][Aa][Rr]             return VAR;
+[Bb][Oo][Oo][Ll][Ee][Aa][Nn]  return BOOLEAN;
+[Ii][Nn][Tt][Ee][Gg][Ee][Rr]  return INTEGER;
+":"         return COLON;
+[Tt][Rr][Uu][Ee]    return TRUE_CONST;
+[Ff][Aa][Ll][Ss][Ee] return FALSE_CONST;
+
+
 
 {id}		return ID;
 {stringconst}	return STRINGCONST;

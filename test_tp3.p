@@ -9,6 +9,9 @@ if a < b then
 else
     c := a - b;
 
+
+    (*ca m'affiche 15 *)
+
 while c > 0 do
 begin
     c := c - 1;
