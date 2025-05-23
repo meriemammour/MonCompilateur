@@ -37,11 +37,13 @@ enum OPREL {EQU, DIFF, INF, SUP, INFE, SUPE, WTFR};
 enum OPADD {ADD, SUB, OR, WTFA};
 enum OPMUL {MUL, DIV, MOD, AND ,WTFM};
 
-// Prototypes anticipés pour éviter erreurs
-enum TYPES { UNSIGNED_INT, TYPE_BOOLEAN };
+// Prototypes anticipés pour éviter les erreurs
+//enum TYPES { UNSIGNED_INT, TYPE_BOOLEAN };
+enum TYPES { UNSIGNED_INT, TYPE_BOOLEAN, TYPE_DOUBLE, TYPE_CHAR }; // tp7
 
 
-// Prototypes anticipés avec le bon type de retour
+
+// Prototypes anticipés changer le void to types dans tp5 
 TYPES Factor(void);
 TYPES Term(void);
 OPADD AdditiveOperator(void);
@@ -83,6 +85,10 @@ void Program(void);
 // -- Fonctions de base (Identifier, Number, Factor, etc) --
 // (tes définitions de Identifier, Number, Factor, Term, etc ici...)
 
+
+
+
+
 //modificatiion tp44
 TYPES Identifier(void){
     string var = lexer->YYText();
@@ -94,14 +100,16 @@ TYPES Identifier(void){
 }
 
 // modification tp4
-TYPES Number(void){
+TYPES Number(void) {
     cout << "\tpush $" << atoi(lexer->YYText()) << endl;
-    current = (TOKEN) lexer->yylex();
+    current = (TOKEN) lexer->yylex();  // Très important : avancer le token
     return UNSIGNED_INT;
 }
 
+
+
 //modification tp4
-TYPES Factor(void){
+TYPES Factor(void) {
     TYPES type;
     if(current == LPARENT){  // '('
         current = (TOKEN) lexer->yylex();
@@ -110,21 +118,47 @@ TYPES Factor(void){
             Error("')' était attendu");
         else
             current = (TOKEN) lexer->yylex();
+        return type;
     }
-    else if(current == NUMBER)
+    else if(current == NUMBER) {
         type = Number();
+        return type;
+    }
+    else if(current == DOUBLECONST) {
+        cout << "DEBUG : doubleconst lu : " << lexer->YYText() << endl;
+        double f = atof(lexer->YYText());
+        long long unsigned int *i = (long long unsigned int *) &f;
+        cout << "\tpush $" << *i << "\t# empile le flottant " << f << endl;
+        current = (TOKEN) lexer->yylex();
+        type = TYPE_DOUBLE;
+        return type;
+    }
+    else if(current == CHARCONST) {  // <-- ici, remplace CHAR_CONST par CHARCONST
+        char c = lexer->YYText()[1];
+        cout << "\tpush $" << (int)c << "\t# empile le char '" << c << "'" << endl;
+        current = (TOKEN) lexer->yylex();
+        type = TYPE_CHAR;
+        return type;
+    }
     else if(current == TRUE_CONST || current == FALSE_CONST) { 
-        // Si le lexer retourne TRUE_CONST et FALSE_CONST pour true/false
         cout << "\tpush $" << (current == TRUE_CONST ? 1 : 0) << endl;
         current = (TOKEN) lexer->yylex();
         type = TYPE_BOOLEAN;
+        return type;
     }
-    else if(current == ID)
+    else if(current == ID) {
         type = Identifier();
+        return type;
+    }
     else
         Error("'(' ou chiffre ou lettre attendue");
-    return type;
+    return type;  // cette ligne est atteinte seulement si erreur n’est pas lancée
 }
+
+
+
+
+
 
 
 
@@ -171,52 +205,81 @@ TYPES Term(void){
     while(current == MULOP){
         mulop = MultiplicativeOperator();
         type2 = Factor();
+
         if(type2 != type1)
             Error("types incompatibles dans Term");
 
-        // Génération de code assembleur selon mulop
-        cout << "\tpop %rbx" << endl;  // deuxième opérande
-        cout << "\tpop %rax" << endl;  // premier opérande
-        switch(mulop) {
-            case AND:
-                if(type1 != TYPE_BOOLEAN)
-                    Error("type BOOLEAN attendu pour AND");
-                cout << "\tandq %rbx, %rax\t# AND" << endl;
-                break;
-            case MUL:
-                if(type1 != UNSIGNED_INT)
-                    Error("type UNSIGNED_INT attendu pour MUL");
-                cout << "\timulq %rbx, %rax\t# MUL" << endl;
-                break;
-            case DIV:
-                if(type1 != UNSIGNED_INT)
-                    Error("type UNSIGNED_INT attendu pour DIV");
-                cout << "\tmovq $0, %rdx" << endl;
-                cout << "\tidivq %rbx\t# DIV" << endl;
-                break;
-            case MOD:
-                if(type1 != UNSIGNED_INT)
-                    Error("type UNSIGNED_INT attendu pour MOD");
-                cout << "\tmovq $0, %rdx" << endl;
-                cout << "\tidivq %rbx\t# MOD" << endl;
-                cout << "\tmovq %rdx, %rax" << endl;
-                break;
-            default:
-                Error("opérateur multiplicatif inconnu");
+        if(type1 == TYPE_DOUBLE) {
+            // Dépile 2 doubles de la pile générale vers la pile flottante
+            cout << "\tfldl (%rsp)" << endl;     // charge 2e opérande
+            cout << "\taddq $8, %rsp" << endl;    // dépile la pile générale
+            cout << "\tfldl (%rsp)" << endl;     // charge 1er opérande
+            cout << "\taddq $8, %rsp" << endl;    // dépile la pile générale
+
+            switch(mulop) {
+                case MUL:
+                    if(type1 != UNSIGNED_INT)
+            Error("type UNSIGNED_INT attendu pour MUL");
+        cout << "\timulq %rbx, %rax\t# MUL" << endl;
+        break;
+                case DIV:
+                    cout << "\tfdivp %st(1), %st(0)\t# DIV double" << endl;
+                    break;
+                default:
+                    Error("opérateur multiplicatif non supporté pour double");
+            }
+
+            cout << "\tsubq $8, %rsp" << endl;    // empile de l’espace sur la pile générale
+            cout << "\tfstpl (%rsp)" << endl;    // stocke le résultat sur la pile générale
         }
-        cout << "\tpush %rax" << endl;
+        else {
+            // Gestion int/boolean
+            cout << "\tpop %rbx" << endl;  // deuxième opérande
+            cout << "\tpop %rax" << endl;  // premier opérande
+            switch(mulop) {
+                case AND:
+                    if(type1 != TYPE_BOOLEAN)
+                        Error("type BOOLEAN attendu pour AND");
+                    cout << "\tandq %rbx, %rax\t# AND" << endl;
+                    break;
+                case MUL:
+                    if(type1 != UNSIGNED_INT)
+                        Error("type UNSIGNED_INT attendu pour MUL");
+                    cout << "\timulq %rbx, %rax\t# MUL" << endl;
+                    break;
+                case DIV:
+                    if(type1 != UNSIGNED_INT)
+                        Error("type UNSIGNED_INT attendu pour DIV");
+                    cout << "\tmovq $0, %rdx" << endl;
+                    cout << "\tidivq %rbx\t# DIV" << endl;
+                    break;
+                case MOD:
+                    if(type1 != UNSIGNED_INT)
+                        Error("type UNSIGNED_INT attendu pour MOD");
+                    cout << "\tmovq $0, %rdx" << endl;
+                    cout << "\tidivq %rbx\t# MOD" << endl;
+                    cout << "\tmovq %rdx, %rax" << endl;
+                    break;
+                default:
+                    Error("opérateur multiplicatif inconnu");
+            }
+            cout << "\tpush %rax" << endl;
+        }
     }
     return type1;
 }
 
 
 
+
+
+
 // (Le reste des fonctions comme MultiplicativeOperator, Term, AdditiveOperator, SimpleExpression, etc.)
 
 // --- Fonctions déclaration et expressions (DeclarationPart, RelationalOperator, Expression) ---
-//modification en tp4 / tp5 / tp6
+//modification en tp4 / tp5 / tp6 /tp7
 void DeclarationPart() {
-    if(current != VAR)
+    if(current != KEYWORD || strcmp(lexer->YYText(), "VAR") != 0)
         Error("VAR attendu en début de déclaration");
 
     current = (TOKEN) lexer->yylex();  // consomme VAR
@@ -224,7 +287,6 @@ void DeclarationPart() {
     while(current == ID) {
         vector<string> vars;
         vars.push_back(lexer->YYText());
-
         current = (TOKEN) lexer->yylex();
 
         while(current == COMMA) {
@@ -240,35 +302,51 @@ void DeclarationPart() {
 
         current = (TOKEN) lexer->yylex();
 
-        if(current != BOOLEAN && current != INTEGER)
-            Error("Type BOOLEAN ou INTEGER attendu après ':'");
+        if(current != KEYWORD)
+            Error("Type attendu (BOOLEAN, INTEGER, DOUBLE ou CHAR)");
+
+        string type_str = lexer->YYText();
 
         TYPES type;
-        if(current == BOOLEAN)
-            type = TYPE_BOOLEAN;
+        if(type_str == "BOOLEAN") type = TYPE_BOOLEAN;
+        else if(type_str == "INTEGER") type = UNSIGNED_INT;
+        else if(type_str == "DOUBLE")  type = TYPE_DOUBLE;
+        else if(type_str == "CHAR")    type = TYPE_CHAR;
         else
-            type = UNSIGNED_INT;
-
-        for(const auto &v : vars) {
-            if(IsDeclared(v.c_str()))
-                Error("Variable déjà déclarée : " + v);
-            DeclaredVariables[v] = type;
-            cout << v << ":\t.quad 0" << endl;
-        }
+            Error("Type inconnu");
 
         current = (TOKEN) lexer->yylex();
+       
+       for(const auto &v : vars) {
+    if(IsDeclared(v.c_str()))
+        Error("Variable déjà déclarée : " + v);
+    DeclaredVariables[v] = type;
 
-        if(current == SEMICOLON) {
-            current = (TOKEN) lexer->yylex();
-        }
-        else if(current == BEGIN_TOKEN) {
+    switch(type) {
+        case TYPE_BOOLEAN:
+        case UNSIGNED_INT:
+            cout << v << ":\t.quad 0" << endl;      // 8 octets initialisés à 0
             break;
-        }
-        else {
-            Error("';' ou 'BEGIN' attendu après déclaration");
-        }
+        case TYPE_DOUBLE:
+            cout << v << ":\t.double 0.0" << endl;  // 8 octets double 0.0
+            break;
+        case TYPE_CHAR:
+            cout << v << ":\t.byte 0" << endl;      // 1 octet 0
+            break;
     }
 }
+
+
+        if(current == SEMICOLON)
+            current = (TOKEN) lexer->yylex();
+        else if(current == KEYWORD && strcmp(lexer->YYText(), "BEGIN") == 0)
+
+            break;
+        else
+            Error("';' ou 'BEGIN' attendu après déclaration");
+    }
+}
+
 
 
 
@@ -302,36 +380,68 @@ TYPES SimpleExpression(void){
         if(type2 != type1)
             Error("types incompatibles dans SimpleExpression");
 
-        // Génération de code assembleur selon adop
         cout << "\tpop %rbx" << endl;
         cout << "\tpop %rax" << endl;
+
+        bool double_op = false;
+
         switch(adop) {
             case OR:
                 if(type1 != TYPE_BOOLEAN)
                     Error("type BOOLEAN attendu pour OR");
                 cout << "\torq %rbx, %rax\t# OR" << endl;
                 break;
+
             case ADD:
-                if(type1 != UNSIGNED_INT)
-                    Error("type UNSIGNED_INT attendu pour ADD");
-                cout << "\taddq %rbx, %rax\t# ADD" << endl;
+                if(type1 == UNSIGNED_INT)
+                    cout << "\taddq %rbx, %rax\t# ADD" << endl;
+                else if(type1 == TYPE_DOUBLE) {
+                    cout << "\tfldl (%rsp)" << endl;
+                    cout << "\taddq $8, %rsp" << endl;
+                    cout << "\tfldl (%rsp)" << endl;
+                    cout << "\taddq $8, %rsp" << endl;
+                    cout << "\tfaddp %st(1), %st(0)\t# ADD double" << endl;
+                    cout << "\tsubq $8, %rsp" << endl;
+                    cout << "\tfstpl (%rsp)" << endl;
+                    double_op = true;
+                }
+                else
+                    Error("type non supporté pour ADD");
                 break;
+
             case SUB:
-                if(type1 != UNSIGNED_INT)
-                    Error("type UNSIGNED_INT attendu pour SUB");
-                cout << "\tsubq %rbx, %rax\t# SUB" << endl;
+                if(type1 == UNSIGNED_INT)
+                    cout << "\tsubq %rbx, %rax\t# SUB" << endl;
+                else if(type1 == TYPE_DOUBLE) {
+                    cout << "\tfldl (%rsp)" << endl;
+                    cout << "\taddq $8, %rsp" << endl;
+                    cout << "\tfldl (%rsp)" << endl;
+                    cout << "\taddq $8, %rsp" << endl;
+                    cout << "\tfsubp %st(1), %st(0)\t# SUB double" << endl;
+                    cout << "\tsubq $8, %rsp" << endl;
+                    cout << "\tfstpl (%rsp)" << endl;
+                    double_op = true;
+                }
+                else
+                    Error("type non supporté pour SUB");
                 break;
+
             default:
                 Error("opérateur additif inconnu");
         }
-        cout << "\tpush %rax" << endl;
+
+        if(!double_op)
+            cout << "\tpush %rax" << endl;
     }
     return type1;
 }
 
 
+
 //modiification tp4
 TYPES Expression(void){
+    cerr << "DEBUG Expression : token actuel = " << current << " (" << lexer->YYText() << ")" << endl;
+
     TYPES type1, type2;
     OPREL oprel;
     type1 = SimpleExpression();
@@ -386,6 +496,8 @@ TYPES Expression(void){
 // --- Structures de contrôle (AssignementStatement, IfStatement, WhileStatement, ForStatement, BlockStatement) ---
 //modification en tp4
 void AssignementStatement(void){
+    cerr << "DEBUG AssignementStatement : token actuel = " << current << " (" << lexer->YYText() << ")" << endl;
+
     if(current != ID)
         Error("Identificateur attendu");
     string variable = lexer->YYText();
@@ -406,16 +518,26 @@ void AssignementStatement(void){
     TYPES exprType = Expression();
 
     // Vérifier compatibilité des types
+    cerr << "DEBUG Types dans AssignementStatement : varType = " << varType << ", exprType = " << exprType << endl;
     if(exprType != varType)
         Error("types incompatibles dans l'affectation");
 
     // Générer le code assembleur pour stocker la valeur dans la variable
-    cout << "\tpop %rax" << endl;
-cout << "\tmovq %rax, " << variable << "(%rip)" << endl;
-cout << "// AssignementStatement: stocke dans " << variable << endl;
+    if(varType == TYPE_DOUBLE) {
+        // Pour double, charger le double au sommet de la pile flottante et stocker en mémoire
+        cout << "\tfldl (%rsp)" << endl;    // Charger double en %st(0)
+        cout << "\taddq $8, %rsp" << endl;   // Dépiler la pile générale
+        cout << "\tfstpl " << variable << "(%rip)" << endl;  // Stocker double en mémoire
+    }
+    else {
+        cout << "\tpop %rax" << endl;
+        cout << "\tmovq %rax, " << variable << "(%rip)" << endl;
+    }
 
-
+    cout << "// AssignementStatement: stocke dans " << variable << endl;
 }
+
+
 
 //modification en tp4
 void IfStatement(void){
@@ -511,16 +633,17 @@ void ForStatement(void){
 
 	AssignementStatement();           // Initialisation (ex: i := 0)
 
-	if(current != TO)
-		Error("TO attendu");
+	if(current != KEYWORD || strcmp(lexer->YYText(), "TO") != 0)
+    Error("TO attendu");
 	current = (TOKEN) lexer->yylex();
 
 	Expression();                     // Valeur limite
 	cout << "\tpop %rbx" << endl;    // Stocker limite dans %rbx
 
-	if(current != DO)
-		Error("DO attendu");
-	current = (TOKEN) lexer->yylex();
+	if(current != KEYWORD || strcmp(lexer->YYText(), "DO") != 0)
+    Error("DO attendu");
+current = (TOKEN) lexer->yylex();
+
 
 	cout << "Boucle" << tagStart << ":" << endl;
 
@@ -538,78 +661,109 @@ void ForStatement(void){
 	cout << "\taddq $1, %rax" << endl;
 	cout << "\tpush %rax" << endl;
 	cout << "\tpop " << variable << endl;
-
 	cout << "\tjmp Boucle" << tagStart << endl;
 	cout << "FinBoucle" << tagEnd << ":" << endl;
 }
 
+
+
+
 void BlockStatement(void) {
-    if(current != BEGIN_TOKEN)
-        Error("BEGIN attendu");
-    current = (TOKEN) lexer->yylex();
+    // On doit recevoir BEGIN ici (on vient de vérifier dans Statement)
+    current = (TOKEN) lexer->yylex();  // consomme BEGIN
 
     Statement();
 
-    while(current == SEMICOLON){
+    while(current == SEMICOLON) {
         current = (TOKEN) lexer->yylex();
-        if(current == END_TOKEN)
+        if(current == KEYWORD && strcmp(lexer->YYText(), "END") == 0)
             break;
         Statement();
     }
 
-    if(current != END_TOKEN)
+    if(current != KEYWORD || strcmp(lexer->YYText(), "END") != 0)
         Error("END attendu");
-    current = (TOKEN) lexer->yylex();
 
-    // Ne pas gérer le DOT ici, c'est géré dans StatementPart()
+    current = (TOKEN) lexer->yylex();  // consomme END
 }
 
 
 
-//tp 5 
+
+//tp 5  /modifier tp7
 void DisplayStatement(void) {
     current = (TOKEN) lexer->yylex();  // consommer DISPLAY
     TYPES typeExpr = Expression();
-    if(typeExpr != UNSIGNED_INT)
-        Error("DISPLAY ne fonctionne que pour les nombres entiers non signés");
-    cout << "\tpop %rsi" << endl;
-    cout << "\tleaq FormatString1(%rip), %rdi" << endl;
-    cout << "\tmovq $0, %rax" << endl;
-    cout << "\tcall printf@PLT" << endl;
-    cout << "// DisplayStatement called" << endl;
 
+    switch(typeExpr) {
+        case UNSIGNED_INT:
+            cout << "\tpop %rsi" << endl;
+            cout << "\tleaq FormatStringInt(%rip), %rdi" << endl;
+            cout << "\tmovq $0, %rax" << endl;
+            cout << "\tcall printf@PLT" << endl;
+            break;
+
+        case TYPE_DOUBLE:
+            // La valeur flottante est sur la pile générale (64 bits)
+            // On la charge dans %st(0), la pousse sur la pile générale, puis appelle printf
+            cout << "\tfldl (%rsp)" << endl;      // Charge le flottant en %st(0)
+            cout << "\taddq $8, %rsp" << endl;     // Dépile la pile générale
+            cout << "\tsubq $8, %rsp" << endl;     // Alloue 8 octets sur la pile
+            cout << "\tfstpl (%rsp)" << endl;      // Stocke %st(0) sur la pile générale
+            cout << "\tleaq FormatStringDouble(%rip), %rdi" << endl;
+            cout << "\tmovq $1, %rax" << endl;     // 1 argument en xmm0 pour printf
+            cout << "\tcall printf@PLT" << endl;
+            cout << "\taddq $8, %rsp" << endl;     // Libère la pile après appel
+            break;
+
+        case TYPE_CHAR:
+            cout << "\tpop %rsi" << endl;          // Le caractère sera dans %sil (partie basse de rsi)
+            cout << "\tleaq FormatStringChar(%rip), %rdi" << endl;
+            cout << "\tmovq $0, %rax" << endl;
+            cout << "\tcall printf@PLT" << endl;
+            break;
+
+        default:
+            Error("DISPLAY ne supporte que UNSIGNED_INT, DOUBLE ou CHAR");
+    }
 }
+
 
 
 
 
 void Statement(void) {
-    switch(current) {
-        case ID:
-            AssignementStatement();
-            break;
-        case IF:
+    if(current == ID) {
+        AssignementStatement();
+    }
+    else if(current == KEYWORD) {
+        if(strcmp(lexer->YYText(), "IF") == 0) {
             IfStatement();
-            break;
-        case WHILE:
+        }
+        else if(strcmp(lexer->YYText(), "WHILE") == 0) {
             WhileStatement();
-            break;
-        case FOR:
+        }
+        else if(strcmp(lexer->YYText(), "FOR") == 0) {
             ForStatement();
-            break;
-        case BEGIN_TOKEN:
+        }
+        else if(strcmp(lexer->YYText(), "BEGIN") == 0) {
             BlockStatement();
-            break;
-        case DISPLAY:      // <-- ici la gestion de DISPLAY
+        }
+        else if(strcmp(lexer->YYText(), "DISPLAY") == 0) {
             DisplayStatement();
-            break;
-        case END_TOKEN:
+        }
+        else if(strcmp(lexer->YYText(), "END") == 0) {
             Error("Instruction attendue (pas END)");
-            break;
-        default:
-            Error("Instruction attendue");
+        }
+        else {
+            Error("Mot clé inconnu");
+        }
+    }
+    else {
+        Error("Instruction attendue");
     }
 }
+
 
 
 
@@ -653,23 +807,30 @@ cout << "\tret\t# Return from main" << endl;
 
 
 
-//modification tp6
+//modification tp6 /tp7
 void Program(void){
-    cout << "\t.data" << endl;
-    cout << "\t.align 8" << endl;
+        cout << "\t.data" << endl;
+        cout << "\t.align 8" << endl;
 
-    // Déclare la chaîne de format pour printf (toujours présente)
-    cout << "FormatString1:\t.string \"%llu\\n\"\t# used by printf to display 64-bit unsigned integers" << endl;
+            // chaînes de format...
+    cout << "FormatStringInt:\t.string \"%llu\\n\"\t# Format pour unsigned int" << endl;
+    cout << "FormatStringDouble:\t.string \"%f\\n\"\t# Format pour double" << endl;
+    cout << "FormatStringChar:\t.string \"%c\\n\"\t# Format pour char" << endl;
 
-    // Ensuite, si on a des variables, on les déclare ici
-    if(current == VAR)
-        DeclarationPart();  // ça imprime des lignes de variables ex: a: .quad 0
+            // Appel à DeclarationPart() pour générer les variables
+    if(current == KEYWORD && strcmp(lexer->YYText(), "VAR") == 0)
+    DeclarationPart();
 
     cout << "\t.text" << endl;
     cout << "\t.globl main" << endl;
     cout << "main:" << endl;
-    cout << "\tpush %rbp" << endl;
-    cout << "\tmovq %rsp, %rbp" << endl;
+
+// suite de génération du code
+    //cout << "\t.text" << endl;
+    //cout << "\t.globl main" << endl;
+    //cout << "main:" << endl;
+    //cout << "\tpush %rbp" << endl;
+    //cout << "\tmovq %rsp, %rbp" << endl;
 
     if(current == BEGIN_TOKEN){
         BlockStatement();
@@ -685,10 +846,6 @@ void Program(void){
     cout << "\tpop %rbp\t\t\t# Restore old base pointer" << endl;
     cout << "\tret\t\t\t# Return from main function" << endl;
 }
-
-
-
-
 
 
 int main(int argc, char* argv[]) {

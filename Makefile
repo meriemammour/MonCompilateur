@@ -19,7 +19,7 @@ compilateur: compilateur.cpp tokeniser.o
 
 # Générer le code assembleur test.s à partir de compilateur et test.p (TP3)
 test.s: compilateur test.p
-	./compilateur < test.p > test.s
+	./compilateur  test.p > test.s
 
 # Compiler le code assembleur en exécutable test (TP3)
 test: test.s
@@ -27,7 +27,7 @@ test: test.s
 
 # Générer le code assembleur sortie.s à partir de compilateur et test_tp4.p (TP4)
 sortie.s: compilateur test_tp4.p
-	./compilateur < test_tp4.p > sortie.s
+	./compilateur  test_tp4.p > sortie.s
 
 # Compiler le code assembleur en exécutable programme (TP4)
 programme: sortie.s
@@ -35,7 +35,7 @@ programme: sortie.s
 
 # Générer le code assembleur sortie_tp5.s à partir de compilateur et test_tp5.p (TP5)
 sortie_tp5.s: compilateur test_tp5.p
-	./compilateur < test_tp5.p > sortie_tp5.s
+	./compilateur  test_tp5.p > sortie_tp5.s
 
 # Compiler le code assembleur en exécutable test_tp5_exec (TP5)
 test_tp5_exec: sortie_tp5.s

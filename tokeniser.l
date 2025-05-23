@@ -19,11 +19,12 @@ using namespace std;
 %option c++
 %option yylineno
 
-stringconst  \"[^\n"]+\"
+charconst	\'\\?.\'
 ws      [ \t\n\r]+
 alpha   [A-Za-z]
 digit   [0-9]
-number  {digit}+
+number  {digit}+(\.{digit}+)?
+keyword	(DISPLAY|IF|THEN|ELSE|BEGIN|END|FOR|TO|DOWNTO|WHILE|DO|VAR|INTEGER|BOOLEAN|CHAR|DOUBLE)
 id	{alpha}({alpha}|{digit})*
 addop	(\+|\-|\|\|)
 mulop	(\*|\/|%|\&\&)
@@ -36,44 +37,21 @@ unknown [^\"A-Za-z0-9 \n\r\t\(\)\<\>\=\!\%\&\|\}\-\;\.]+
 {mulop}		return MULOP;
 {relop}		return RELOP;
 {number}	return NUMBER;
-
-
-"if"		return IF;
-"then"		return THEN;
-"else"		return ELSE;
-"while"		return WHILE;
-"do"		return DO;
-"for"		return FOR;
-"to"		return TO;
-[Bb][Ee][Gg][Ii][Nn]     return BEGIN_TOKEN;
-[Ee][Nn][Dd]             return END_TOKEN;
-[Dd][Ii][Ss][Pp][Ll][Aa][Yy]  return DISPLAY;
-[Vv][Aa][Rr]             return VAR;
-[Bb][Oo][Oo][Ll][Ee][Aa][Nn]  return BOOLEAN;
-[Ii][Nn][Tt][Ee][Gg][Ee][Rr]  return INTEGER;
-":"         return COLON;
-[Tt][Rr][Uu][Ee]    return TRUE_CONST;
-[Ff][Aa][Ll][Ss][Ee] return FALSE_CONST;
-
-
-
+{keyword}	return KEYWORD;
 {id}		return ID;
-{stringconst}	return STRINGCONST;
-
+{charconst}	return CHARCONST;
 "["		return RBRACKET;
 "]"		return LBRACKET;
 ","		return COMMA;
 ";"		return SEMICOLON;
 "."		return DOT;
+":"		return COLON;
 ":="		return ASSIGN;
 "("		return RPARENT;
 ")"		return LPARENT;
 "!"		return NOT;
-
 <<EOF>>		return FEOF;
-
 {ws}    {/* skip blanks and tabs */};
-
 "(*"    { /* Skip comments between '(*' and '*)' */
 		int c;
 		while((c = yyinput()) != 0){
@@ -89,3 +67,4 @@ unknown [^\"A-Za-z0-9 \n\r\t\(\)\<\>\=\!\%\&\|\}\-\;\.]+
 {unknown}	return UNKNOWN;
 
 %%
+
